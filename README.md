@@ -120,6 +120,115 @@ bash /tmp/x-harness/install.sh --project . --clients dsh --dsh-hooks bridge --ds
 2. `bash /tmp/x-harness/bin/xh doctor` в проекте — что подключено; `bash /tmp/x-harness/verify.sh --project .` — сверка установленной копии с манифестом.
 3. Отрицательный сценарий: создай ветку `hotfix/test` и попроси агента записать что-нибудь в `planning/ROADMAP.md`. Запись должна быть **заблокирована** с подсказкой `registry.sh`. Если прошла — хуки клиента не подключены.
 
+### Примеры
+
+Во всех примерах пакет клонируется один раз в `/tmp/x-harness`, а установщик запускается **из каталога целевого проекта**, а не из самого x-harness.
+
+```bash
+git clone --depth 1 https://github.com/cheusbeats/x-harness.git /tmp/x-harness
+```
+
+Если каталог уже есть, просто обнови его:
+
+```bash
+git -C /tmp/x-harness pull --ff-only
+```
+
+#### 1. Реестры планов в проекте на любом стеке (Claude Code + Codex)
+
+```bash
+cd ~/work/projects/my-app
+bash /tmp/x-harness/install.sh --project . --profile planning --clients claude,codex
+```
+
+Ожидаемый вывод (сокращён):
+
+```
+x-harness: profile=planning mode=snapshot project=/Users/you/work/projects/my-app
+клиенты: claude=1 codex=1 dsh=0 kimi=0 zcode=0 opencode=0 generic=0; skills=auto
+1/5 payload planning -> /Users/you/work/projects/my-app
+2/5 git-хуки
+ok: core.hooksPath=.githooks
+init: реестры planning/
+  создан: planning/ROADMAP.md
+  создан: planning/ACTIVE_PLANS.md
+```
+
+Первый план:
+
+```bash
+.claude/scripts/registry.sh add PLAN auto "Название плана"
+```
+
+#### 2. Laravel-проект: Claude Code, Kimi Code и OpenCode
+
+Сначала посмотри план без изменений, потом установи:
+
+```bash
+cd ~/work/projects/shop
+bash /tmp/x-harness/install.sh --project . --clients claude,kimi,opencode --dry-run
+```
+
+```bash
+bash /tmp/x-harness/install.sh --project . --clients claude,kimi,opencode
+```
+
+Проект получит `CLAUDE.md`/`AGENTS.md`, `.claude/` (хуки, скрипты, роли), `.ai/` (правила и навыки), `.githooks/`, `planning/README.md`, а для Kimi — роли `.agents/agents/*.md`. Хуки Kimi и OpenCode приходят из плагина (шаг 1), у Claude Code — из `.claude/settings.json`.
+
+#### 3. Проект для DeepSeek Harness
+
+```bash
+cd ~/work/projects/my-app
+bash /tmp/x-harness/install.sh --project . --clients dsh --dsh-hooks bridge --dsh-version "$(dsh --version)" --dsh-profile web
+```
+
+Посмотри готовый блок для профиля DSH:
+
+```bash
+cat .dsh/hooks-bridge.yml
+```
+
+Он выглядит так (путь — твой):
+
+```yaml
+- id: hooks-claude-code
+  name: '@deepseek-ai/dsh-hooks-claude-code'
+  config:
+    configPath: /Users/you/work/projects/my-app/.dsh/hooks-bridge.json
+```
+
+Вставь блок в `~/.dsh/profiles/web/cordis.patch.yml` и перезапусти профиль `web`.
+
+#### 4. Повторная установка поверх старой версии
+
+```bash
+git -C /tmp/x-harness pull --ff-only
+```
+
+```bash
+bash /tmp/x-harness/install.sh --project . --profile planning --force
+```
+
+Старые файлы уйдут в `.x-harness-backup.<дата-время>/` в корне проекта.
+
+#### Проверка, что хуки работают
+
+На ветке `hotfix/test` попроси агента записать что-нибудь в `planning/ROADMAP.md`. Правильный ответ хука:
+
+```
+…/planning/ROADMAP.md — индекс реестра, прямая правка Edit/Write запрещена.
+Используй .claude/scripts/registry.sh: next-id | add <RM|HF|PLAN> <id|auto> "название" | set-status <id> <статус> | show <id> | check.
+```
+
+#### Частые ошибки
+
+| Сообщение | Причина | Что делать |
+|---|---|---|
+| `ERROR: в проекте уже есть: - CLAUDE.md - AGENTS.md — повтори с --force` | установщик запущен в каталоге, где уже есть свои правила (часто — в самом x-harness или в проекте с собственной обвязкой) | проверь `pwd`; `--force` заменит файлы, сохранив старые в `.x-harness-backup.*` |
+| `fatal: destination path '/tmp/x-harness' already exists` | пакет уже склонирован | пропусти `git clone` или сделай `git -C /tmp/x-harness pull --ff-only` |
+| `для bridge нужна точная --dsh-version` | не передана версия DSH | добавь `--dsh-version "$(dsh --version)"` |
+| запись в `planning/ROADMAP.md` прошла | хуки клиента не подключены | перезапусти клиент, подтверди доверие к хукам (Codex, ZCode), для DSH проверь `cordis.patch.yml` |
+
 Подробно про каждый клиент, матрицу совместимости и уровни проверки — [`skills/x-harness/references/08-install-and-acceptance.md`](skills/x-harness/references/08-install-and-acceptance.md).
 
 ## Профили
