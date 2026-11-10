@@ -1,0 +1,10 @@
+# x-harness as a DSH bundle: mounts the Claude-hooks bridge once per profile.
+# The bridge config is process-wide, so hooks/dsh-hooks.json is global; adapters/agent-hook.py
+# finds the project from the session cwd and does nothing where x-harness is not installed.
+# baseUrl is the profile directory; pnpm installs this package at <profile>/node_modules/x-harness.
+- insert:
+    - id: x-harness-hooks
+      name: '@deepseek-ai/dsh-hooks-claude-code'
+      config:
+        configPath: !!js decodeURIComponent(new URL('node_modules/x-harness/hooks/dsh-hooks.json', baseUrl).pathname)
+        pluginRoot: !!js decodeURIComponent(new URL('node_modules/x-harness/', baseUrl).pathname)

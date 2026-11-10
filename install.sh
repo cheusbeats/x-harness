@@ -839,26 +839,19 @@ log "4/5 DSH-мост хуков: $DSH_HOOKS"
 case "$DSH_HOOKS" in
   none) ;;
   bridge)
+    # Мост читает конфиг один раз на весь процесс DSH, поэтому хуки — глобальный бандл x-harness
+    # (package.json → dsh.bundle), а не файл в проекте. Проект переводчик находит по cwd сессии.
     command -v dsh >/dev/null 2>&1 || fail "для --dsh-hooks bridge нужен dsh в PATH"
     [ -n "$DSH_VERSION" ] || fail "для bridge нужна точная --dsh-version, равная версии Host"
+    DSH_SOURCE="${XH_DSH_SOURCE:-github:cheusbeats/x-harness}"
     if [ "$DRY" = 1 ]; then
-      log "  [dry] dsh plugin add @deepseek-ai/dsh-hooks-claude-code@$DSH_VERSION @deepseek-ai/dsh-hook-protocol@$DSH_VERSION"
-      log "  [dry] .dsh/hooks-bridge.json + .dsh/hooks-bridge.yml"
+      log "  [dry] dsh plugin --profile $DSH_PROFILE add @deepseek-ai/dsh-hooks-claude-code@$DSH_VERSION @deepseek-ai/dsh-hook-protocol@$DSH_VERSION $DSH_SOURCE"
     else
       dsh plugin --profile "$DSH_PROFILE" add \
         "@deepseek-ai/dsh-hooks-claude-code@$DSH_VERSION" \
-        "@deepseek-ai/dsh-hook-protocol@$DSH_VERSION"
-      mkdir -p "$PROJECT/.dsh"
-      gen_dsh_hooks "$PROJECT/.dsh/hooks-bridge.json"
-      cat > "$PROJECT/.dsh/hooks-bridge.yml" <<EOF
-# Добавь этот блок в cordis.patch.yml своего DSH-профиля ($DSH_PROFILE) и перезапусти профиль.
-# Версии bridge/protocol обязаны совпадать с Host; bridge исполняет только subset событий. См. references/08.
-- id: hooks-claude-code
-  name: '@deepseek-ai/dsh-hooks-claude-code'
-  config:
-    configPath: $PROJECT/.dsh/hooks-bridge.json
-EOF
-      log "  создан .dsh/hooks-bridge.json и .dsh/hooks-bridge.yml"
+        "@deepseek-ai/dsh-hook-protocol@$DSH_VERSION" \
+        "$DSH_SOURCE"
+      log "  бандл x-harness добавлен в профиль $DSH_PROFILE; перезапусти профиль DSH"
     fi ;;
   community)
     command -v dsh >/dev/null 2>&1 || fail "для --dsh-hooks community нужен dsh в PATH"

@@ -126,7 +126,7 @@ port-совместим, констант Laravel-профиля в нём не�
 |---|---|---|---|---|---|---|---|
 | Правила | `CLAUDE.md` | `AGENTS.md` | `AGENTS.md` | `AGENTS.md` | `AGENTS.md` (иначе `CLAUDE.md`) | `AGENTS.md` | передать явно |
 | Навыки | `.claude/skills` | плагин или `.agents/skills` | плагин, `.agents/skills` | плагин, `~/.zcode/skills` | `.claude/skills`, `.agents/skills` | `.dsh/skills`, `.agents/skills` | `.agents/skills` |
-| Событийные хуки | `.claude/settings.json` | `.codex/hooks.json` или плагин | плагин (`.kimi-plugin`) | плагин (`.claude-plugin`, `hooks/hooks.json`) | плагин (`.opencode/plugins/x-harness.js`) | мост → `.dsh/agent-hook.py` | только git-хуки + `bin/xh` |
+| Событийные хуки | `.claude/settings.json` | `.codex/hooks.json` или плагин | плагин (`.kimi-plugin`) | плагин (`.claude-plugin`, `hooks/hooks.json`) | плагин (`.opencode/plugins/x-harness.js`) | бандл профиля (`dsh plugin add github:cheusbeats/x-harness`) | только git-хуки + `bin/xh` |
 | Субагенты | `.claude/agents` | `.codex/agents` | `.agents/agents` (указатели на `.claude/agents`) | только пользовательские — нет | плагин регистрирует `.claude/agents` | зависит от клиента | вручную |
 | Git-хуки | `.githooks` | `.githooks` | `.githooks` | `.githooks` | `.githooks` | `.githooks` | `.githooks` |
 

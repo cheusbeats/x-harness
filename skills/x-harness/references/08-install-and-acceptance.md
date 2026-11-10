@@ -108,9 +108,9 @@ Payload включает 8 ролей Codex, абсолютный cwd MCP в н�
 
 Версии мостов должны совпадать с Host: peerDependencies `0.2.1-rc.5`. `install.sh --dsh-hooks bridge` требует явный `--dsh-version`; пример `0.1.0-rc.8` в его `--help` устарел относительно снимка — подставлять версию Host.
 
-Монтирование: строка в `$DSH_HOME/profiles/<profile>/cordis.patch.yml`; профили — в `$DSH_HOME/profiles/<name>`, состав бандлов — в `package.json` → `dsh.profile.bundles`. Команда установки: `dsh plugin --profile <profile> add <package>@<version>`. Автоматически ли `add` вставляет строку, **не подтверждено**: у пакета моста нет поля `dsh.bundle`. `install.sh --dsh-hooks bridge` создаёт `.dsh/hooks-bridge.yml` — готовый блок нужно вставить в `cordis.patch.yml` профиля и перезапустить его.
+Монтирование: x-harness — бандл профиля (`package.json` → `"dsh": {"bundle": {"patch": "./dsh/cordis.patch.yml"}}`). `dsh plugin --profile <profile> add github:cheusbeats/x-harness` сам добавляет его в `dsh.profile.bundles`; патч вставляет строку `x-harness-hooks` (мост `dsh-hooks-claude-code`), пути считаются выражением `!!js` от `baseUrl` — каталога профиля. Пакет моста и протокола ставится отдельно, версией Host.
 
-**Адаптер генерируется установщиком.** `install.sh --dsh-hooks bridge|community` копирует [`adapters/agent-hook.py`](../../../adapters/agent-hook.py) в `.dsh/agent-hook.py` и пишет `.dsh/hooks-bridge.json` / `.dsh/hooks.json` с одной командой на событие: `cd <project> && python3 .dsh/agent-hook.py dsh <Event>`. Переводчик сам читает `.claude/settings.json` проекта. Он приводит `bash`/`edit`/`write`/`read` к именам Claude, а `path`/`filePath` — к `file_path`, и выставляет `CLAUDE_PROJECT_DIR`. Поэтому один конфиг подходит и мосту Claude, и community-плагину, без ручной правки matcher'ов. Перевод payload закреплён тестами (`tests/test_agent_hook.py`, шаг 7 `acceptance-strict.sh`). **Живой прогон моста в конкретном Host не выполнялся** — после установки подтверди negative-сценарий (раздел 5.7).
+**Конфиг моста общий на процесс.** Мост читает `configPath` один раз при загрузке DSH (README моста: process-level, без поиска по сессии), поэтому конфиг в проекте с жёстким `cd <project>` работал бы только для одного проекта. x-harness кладёт глобальный [`hooks/dsh-hooks.json`](../../../hooks/dsh-hooks.json): команды `python3 "${CLAUDE_PLUGIN_ROOT}/adapters/agent-hook.py" dsh <Event>` (`pluginRoot` подставляет мост), хуки исполняются в `cwd` сессии, переводчик находит по нему проект и ничего не делает вне обвязки. Проверено в изолированном `DSH_HOME` (Host 0.1.0-rc.7): бандл добавлен в профиль, в «Списке плагинов» `include:x-harness-hooks` включён и смонтирован; живой вызов хука требует сессии с API-ключом и не выполнялся. `install.sh --dsh-hooks bridge` делает тот же `dsh plugin add` и файлов моста в проект не пишет; `--dsh-hooks community` по-прежнему пишет `.dsh/hooks.json` и `.dsh/agent-hook.py` в проект.
 
 Codex-мост DSH для файловых проверок не подходит: не-shell аргументы приходят как `''`. Выбирать Claude-мост.
 
@@ -324,9 +324,9 @@ python3 .codex/hooks/test_claude_compat.py
 
 ### 5.7. Приёмка DSH (мост)
 
-1. Установить пакет и строку моста: `install.sh --dsh-hooks bridge --dsh-version <host-version>`; вставить `.dsh/hooks-bridge.yml` в `cordis.patch.yml` профиля, перезапустить профиль.
+1. Поставить бандл: `dsh plugin --profile <profile> add @deepseek-ai/dsh-hooks-claude-code@<host> @deepseek-ai/dsh-hook-protocol@<host> github:cheusbeats/x-harness` (или `install.sh --dsh-hooks bridge --dsh-version <host>`), перезапустить профиль.
 2. Проверить вызов событий probe-хуками: SessionStart — command `echo ok >> /tmp/harness-dsh-sessionstart` (файл появился); PreToolUse — matcher `bash`, command `echo denied >&2; exit 2` (безобидная Bash-команда заблокирована).
-3. Проверить сгенерированный `.dsh/hooks-bridge.json` (одна команда на событие → `.dsh/agent-hook.py dsh <Event>`) и negative-сценарий: Edit индекса реестра блокируется, `git commit --no-verify` блокируется. Если PreToolUse не срабатывает — посмотреть, какое имя инструмента реально передаёт Host, и добавить его в `TOOL_ALIASES` переводчика.
+3. В «Настройки → Плагины → Список плагинов» найти `hooks-claude-code` с id `include:x-harness-hooks`, статус «смонтирован». Negative-сценарий в проекте с обвязкой: Edit индекса реестра блокируется, `git commit --no-verify` блокируется. Если PreToolUse не срабатывает — посмотреть имя инструмента, которое передаёт Host, и добавить его в matcher `hooks/dsh-hooks.json` и `TOOL_ALIASES` переводчика.
 4. `CLAUDE_PROJECT_DIR` выставляет переводчик — корень git-проекта из `cwd`.
 
 ### 5.8. Критерий «настроено, но исполнение не подтверждено»

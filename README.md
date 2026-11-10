@@ -64,7 +64,13 @@ codex plugin add x-harness@x-harness
 
 Плагин сам регистрирует роли из `.claude/agents/*.md` проекта как субагентов OpenCode.
 
-**DeepSeek Harness (DSH)** — плагинов из GitHub у DSH нет, хуки подключаются мостом на шаге 2.
+**DeepSeek Harness (DSH)** — x-harness ставится как бандл профиля (профиль `web` или `desktop`). Мост ставится **той же версии**, что Host (`dsh --version`):
+
+```bash
+dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@$(dsh --version) @deepseek-ai/dsh-hook-protocol@$(dsh --version) github:cheusbeats/x-harness
+```
+
+Перезапусти профиль. В «Настройки → Плагины → Список плагинов» появится `hooks-claude-code` с id `include:x-harness-hooks` и статусом «смонтирован». Обновление — `dsh plugin --profile web update x-harness`.
 
 **Только скилл** (любой клиент с Agent Skills, без хуков):
 
@@ -99,20 +105,11 @@ git clone --depth 1 https://github.com/cheusbeats/x-harness.git /tmp/x-harness &
 
 Что `--clients` добавляет в проект: `codex` — `.codex/hooks.json` и роли `.codex/agents`; `kimi` — роли `.agents/agents/*.md`; `zcode` — `.agents/mcp.json` → `.mcp.json`; `dsh` — навыки в `.dsh/skills`.
 
-### DSH: мост хуков
+### DSH: как это устроено
 
-1. Узнай версию Host: `dsh --version`. Мост ставится **той же** версией.
-2. Установи обвязку с мостом (профиль DSH — `web` или `desktop`, по умолчанию `web`):
+Мост `dsh-hooks-claude-code` читает свой конфиг **один раз на весь процесс DSH**, а не на проект. Поэтому x-harness подключает его глобально: `package.json` объявляет `dsh.bundle`, патч [`dsh/cordis.patch.yml`](dsh/cordis.patch.yml) монтирует мост на [`hooks/dsh-hooks.json`](hooks/dsh-hooks.json), а переводчик находит проект по `cwd` сессии. В проекте без обвязки хуки ничего не делают. Тот же шаг выполняет `install.sh --clients dsh --dsh-hooks bridge --dsh-version "$(dsh --version)"` вместе с установкой обвязки в проект.
 
-```bash
-bash /tmp/x-harness/install.sh --project . --clients dsh --dsh-hooks bridge --dsh-version "$(dsh --version)" --dsh-profile web
-```
-
-   Установщик выполнит `dsh plugin add @deepseek-ai/dsh-hooks-claude-code@<версия>` и создаст `.dsh/agent-hook.py`, `.dsh/hooks-bridge.json` и `.dsh/hooks-bridge.yml`.
-3. Скопируй блок из `.dsh/hooks-bridge.yml` в `~/.dsh/profiles/<профиль>/cordis.patch.yml` и перезапусти профиль DSH. Без этого шага мост не загрузится.
-4. Проверь (шаг 3 ниже). Мост DSH поддерживает часть событий (SessionStart, PreToolUse и др.); живой прогон в Host зависит от версии — проверяй отрицательный сценарий.
-
-Альтернатива — сторонний `dsh-hooks-plugin`: `--dsh-hooks community` (тот же `.dsh/agent-hook.py`, конфиг `.dsh/hooks.json`).
+Альтернатива — сторонний `dsh-hooks-plugin`: `--dsh-hooks community` (конфиг `.dsh/hooks.json` в проекте).
 
 ### Шаг 3. Проверка
 
@@ -177,27 +174,18 @@ bash /tmp/x-harness/install.sh --project . --clients claude,kimi,opencode
 
 #### 3. Проект для DeepSeek Harness
 
+Один раз на машину — бандл в профиль DSH (шаг 1), затем обвязка в каждый проект:
+
+```bash
+dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@$(dsh --version) @deepseek-ai/dsh-hook-protocol@$(dsh --version) github:cheusbeats/x-harness
+```
+
 ```bash
 cd ~/work/projects/my-app
-bash /tmp/x-harness/install.sh --project . --clients dsh --dsh-hooks bridge --dsh-version "$(dsh --version)" --dsh-profile web
+bash /tmp/x-harness/install.sh --project . --profile planning --clients dsh
 ```
 
-Посмотри готовый блок для профиля DSH:
-
-```bash
-cat .dsh/hooks-bridge.yml
-```
-
-Он выглядит так (путь — твой):
-
-```yaml
-- id: hooks-claude-code
-  name: '@deepseek-ai/dsh-hooks-claude-code'
-  config:
-    configPath: /Users/you/work/projects/my-app/.dsh/hooks-bridge.json
-```
-
-Вставь блок в `~/.dsh/profiles/web/cordis.patch.yml` и перезапусти профиль `web`.
+Перезапусти профиль `web` и открой сессию с рабочей папкой `my-app`. Если x-harness уже стоял без бандла (DSH писал `declares no dsh.bundle`), обнови его: `dsh plugin --profile web update x-harness`.
 
 #### 4. Повторная установка поверх старой версии
 
@@ -227,7 +215,8 @@ bash /tmp/x-harness/install.sh --project . --profile planning --force
 | `ERROR: в проекте уже есть: - CLAUDE.md - AGENTS.md — повтори с --force` | установщик запущен в каталоге, где уже есть свои правила (часто — в самом x-harness или в проекте с собственной обвязкой) | проверь `pwd`; `--force` заменит файлы, сохранив старые в `.x-harness-backup.*` |
 | `fatal: destination path '/tmp/x-harness' already exists` | пакет уже склонирован | пропусти `git clone` или сделай `git -C /tmp/x-harness pull --ff-only` |
 | `для bridge нужна точная --dsh-version` | не передана версия DSH | добавь `--dsh-version "$(dsh --version)"` |
-| запись в `planning/ROADMAP.md` прошла | хуки клиента не подключены | перезапусти клиент, подтверди доверие к хукам (Codex, ZCode), для DSH проверь `cordis.patch.yml` |
+| запись в `planning/ROADMAP.md` прошла | хуки клиента не подключены | перезапусти клиент, подтверди доверие к хукам (Codex, ZCode); для DSH проверь в списке плагинов `include:x-harness-hooks` |
+| `x-harness declares no dsh.bundle` | старая версия пакета в профиле DSH | `dsh plugin --profile web update x-harness` и перезапуск профиля |
 
 Подробно про каждый клиент, матрицу совместимости и уровни проверки — [`skills/x-harness/references/08-install-and-acceptance.md`](skills/x-harness/references/08-install-and-acceptance.md).
 

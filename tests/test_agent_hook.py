@@ -129,6 +129,17 @@ class ManifestTest(unittest.TestCase):
         for text in [json.dumps(hooks), json.dumps(kimi)]:
             self.assertIn("adapters/agent-hook.py", text)
 
+    def test_dsh_bundle_mounts_global_hooks(self):
+        """DSH: package.json declares a bundle whose patch mounts the bridge on hooks/dsh-hooks.json (client dsh)."""
+        patch = json.loads((ROOT / "package.json").read_text())["dsh"]["bundle"]["patch"]
+        text = (ROOT / patch).read_text()
+        self.assertIn("@deepseek-ai/dsh-hooks-claude-code", text)
+        self.assertIn("node_modules/x-harness/hooks/dsh-hooks.json", text)
+        dsh = json.loads((ROOT / "hooks/dsh-hooks.json").read_text())["hooks"]
+        self.assertEqual(set(dsh), {"SessionStart", "PreToolUse"})
+        commands = [h["command"] for ev in dsh.values() for g in ev for h in g["hooks"]]
+        self.assertTrue(any(c.endswith('agent-hook.py" dsh PreToolUse') for c in commands), commands)
+
 
 if __name__ == "__main__":
     unittest.main()
