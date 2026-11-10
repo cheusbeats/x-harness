@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# pre-push - авторитетная проверка push (SPEC п.7, §9):
+#   1) форма реестров на ПУШИМОМ дереве: git archive <sha> planning -> registry.sh check;
+#   2) строгий слой при STRICT=on (strict-checks.py push-hook): non-fast-forward (force),
+#      удаление MAIN_BRANCH, push в main из не-main, прямые (не-мерж) коммиты впереди
+#      <remote>/main. Теги пропускаются целиком.
+# exit 1 = push заблокирован; внутренняя ошибка хука - fail-open с сообщением.
+cd "$(git rev-parse --show-toplevel)" || exit 0
+command -v python3 >/dev/null 2>&1 || {
+  echo "pre-push: python3 не найден - проверки НЕ выполнены (fail-open)" >&2
+  exit 0
+}
+fail=0
+refs_file="$(mktemp)"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp" "$refs_file"' EXIT
+cat > "$refs_file"
+
+while read -r lref lsha rref rsha; do
+  # теги и удаление ветки (sha из нулей) - проверять форму реестров нечего
+  case "$lref" in refs/tags/*) continue ;; esac
+  [[ "$lsha" =~ ^0+$ ]] && continue
+  rm -rf "$tmp/tree" "$tmp/a.tar"
+  mkdir -p "$tmp/tree"
+  if git archive "$lsha" planning -o "$tmp/a.tar" 2>/dev/null \
+     && tar -x -f "$tmp/a.tar" -C "$tmp/tree" 2>/dev/null \
+     && [ -d "$tmp/tree/planning" ]; then
+    if [ ! -f .claude/scripts/registry.sh ]; then
+      echo "pre-push: нет .claude/scripts/registry.sh - проверка реестров пропущена (fail-open)" >&2
+      continue
+    fi
+    out="$(bash .claude/scripts/registry.sh check --registry all --root "$tmp/tree" 2>&1)"
+    rc=$?
+    if [ "$rc" -eq 1 ] && ! printf '%s' "$out" | grep -q 'Traceback'; then
+      printf '%s\n' "$out" >&2
+      fail=1
+    elif [ "$rc" -ne 0 ]; then
+      echo "pre-push: внутренняя ошибка registry.sh (код $rc), проверка реестров НЕ выполнена" >&2
+    fi
+  else
+    echo "pre-push: в коммите ${lsha:0:8} нет planning/ - проверка реестров пропущена" >&2
+  fi
+done < "$refs_file"
+
+# Строгий слой (SPEC §9). STRICT=off - только базовые проверки выше.
+if [ -f .claude/scripts/planning-lib.sh ] && [ -f .claude/hooks/strict-checks.py ]; then
+  # shellcheck source=../.claude/scripts/planning-lib.sh
+  . .claude/scripts/planning-lib.sh
+  planning_load_conf
+  if planning_strict_on; then
+    if ! python3 .claude/hooks/strict-checks.py push-hook < "$refs_file"; then
+      fail=1
+    fi
+  fi
+fi
+
+[ "$fail" -eq 1 ] && echo "pre-push: push заблокирован (SPEC §9). Обход - только владелец: git push --no-verify." >&2
+exit "$fail"

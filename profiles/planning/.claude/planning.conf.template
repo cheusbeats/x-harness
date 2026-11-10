@@ -1,0 +1,60 @@
+# planning.conf — настройки планировочного профиля x-harness (SPEC п.4).
+# Формат: shell-совместимые строки KEY=VALUE. Все ключи необязательны: без файла
+# хуки и скрипты профиля работают на дефолтах из того же SPEC.
+#
+# Файл генерирует install.sh: MAIN_BRANCH и CODE_ROOTS подставляются по проекту.
+# Правь осознанно: значение в файле главнее дефолта (см. .claude/scripts/planning-lib.sh),
+# пустое — тоже значение (например, DRIFT_MEMORY_INDEX= выключает проверку памяти).
+
+# Основная ветка репозитория (мержи приходят сюда; на ней токен коммита не нужен).
+MAIN_BRANCH=main
+
+# Корни кода для plans-drift и plan-code-refs (через пробел). Пусто или ни одного
+# существующего каталога — автодетект каталогов первого уровня по git (кроме служебных).
+CODE_ROOTS=""
+
+# Шаблон ветки плана: номер плана должен быть в имени ветки.
+FEATURE_BRANCH_RE='^feature/PLAN-([0-9]+(\.[0-9]+)*)(?:-|$)'
+
+# Шаблон ветки хотфикса: коммит требует токен HF-<число>.
+HOTFIX_BRANCH_RE='^hotfix/'
+
+# Требовать токен PLAN-N/HF-N в сообщении коммита: on | off.
+TOKEN_REQUIRED=on
+
+# С какого номера плана действуют E7 (резюме) и жёсткий лимит размера.
+PLAN_SUMMARY_MIN_NUMBER=1
+
+# Пороги размера тела плана: предупреждение и блок (байты).
+PLAN_WARN_BYTES=40960
+PLAN_HARD_BYTES=81920
+
+# Горизонт (дни) для поиска код-коммитов с токеном плана.
+DRIFT_HORIZON_DAYS=90
+
+# Файл «индекса памяти» для drift (пусто — проверка выключена).
+DRIFT_MEMORY_INDEX=
+
+# Срок действия маркера слова владельца (часы).
+OWNER_OK_TTL_HOURS=24
+
+# Что допустимо прямо в корне planning/ (через пробел).
+PLANNING_ROOT_ALLOWED="ROADMAP.md ACTIVE_PLANS.md PLANS.md HOTFIXES.md README.md plans roadmap hotfixes"
+
+# --- строгий слой (SPEC §9) -------------------------------------------------
+# off выключает событийные хуки строгого слоя (branch/commit/merge/main-push),
+# E2/E18 и GATE в git-хуках; ядро (реестры, токен коммита, drift, registry check)
+# продолжает работать. Переключает только владелец: conf — защищённый путь (E18).
+STRICT=on
+
+# Защищённые пути (E18): правка только с маркером владельца hooks-edit.
+# Каталог — с «/» на конце, файл — точным именем.
+PROTECTED_PATHS=".claude/hooks/ .claude/scripts/ .claude/settings.json .claude/planning.conf .githooks/ AGENTS.md .codex/"
+
+# Корневые файлы, которые считаются кодом (E2), сверх каталогов CODE_ROOTS.
+CODE_FILES="Makefile package.json pyproject.toml go.mod go.sum Cargo.toml composer.json requirements.txt"
+
+# Quality Gate профиля: команды проекта, исполняются через bash -c в корне.
+# При STRICT=on GATE_FAST и GATE_MERGE обязательны; пустое значение блокирует операцию.
+GATE_FAST=
+GATE_MERGE=

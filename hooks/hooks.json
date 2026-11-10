@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/adapters/agent-hook.py\" plugin SessionStart",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|Read|MultiEdit|NotebookEdit|ApplyPatch|apply_patch|exec_command|shell_command|shell|functions.exec_command|functions.apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/adapters/agent-hook.py\" plugin PreToolUse",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "x-harness",
+  "version": "1.0.0",
+  "description": "Обвязка разработки для агентов: реестры планов RM/PLAN/HF, git-процесс, гейты и хуки, роли субагентов. Хуки срабатывают только в проектах с установленной обвязкой.",
+  "author": {
+    "name": "Evgeny Romanov",
+    "url": "https://github.com/cheusbeats"
+  },
+  "homepage": "https://github.com/cheusbeats/x-harness",
+  "repository": "https://github.com/cheusbeats/x-harness",
+  "license": "MIT",
+  "keywords": [
+    "planning",
+    "hooks",
+    "git-workflow",
+    "quality-gate",
+    "skills"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "X-Harness",
+    "shortDescription": "Planning registries, git gates and hooks for coding agents",
+    "developerName": "Evgeny Romanov",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/cheusbeats/x-harness"
+  }
+}

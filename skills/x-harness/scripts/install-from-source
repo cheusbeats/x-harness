@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Bootstrap for skill-manager copies that do not retain Git's tracked-file catalog.
+set -euo pipefail
+
+SOURCE='https://github.com/cheusbeats/x-harness.git'
+REF=main
+DRY=0
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY=1 ;;
+    -h|--help)
+      cat <<'HELP'
+Usage: bash <skill-dir>/scripts/install-from-source [install.sh options]
+
+Fetch x-harness from its GitHub main branch in an isolated temporary checkout,
+then run the normal installer with the supplied options and current directory.
+Use --project DIR to select the target. Existing files require --force + backup.
+--dry-run prints the source and installer invocation without fetching or writing.
+To work offline, use install.sh from a Git checkout or a sealed x-harness bundle.
+HELP
+      exit 0 ;;
+  esac
+done
+
+if [ "$DRY" = 1 ]; then
+  printf '[dry] fetch %s (branch %s)\n' "$SOURCE" "$REF"
+  printf '[dry] bash <temporary-checkout>/install.sh'
+  printf ' %q' "$@"
+  printf '\n'
+  exit 0
+fi
+
+command -v git >/dev/null 2>&1 || { echo 'x-harness: нужен git' >&2; exit 1; }
+TEMP_SOURCE="$(mktemp -d "${TMPDIR:-/tmp}/xh-source.XXXXXX")"
+trap 'rm -rf "$TEMP_SOURCE"' EXIT
+git -c core.hooksPath=/dev/null clone --quiet --depth 1 --branch "$REF" -- "$SOURCE" "$TEMP_SOURCE/source"
+printf 'x-harness source: %s @ %s\n' "$SOURCE" "$(git -C "$TEMP_SOURCE/source" rev-parse HEAD)"
+bash "$TEMP_SOURCE/source/install.sh" "$@"

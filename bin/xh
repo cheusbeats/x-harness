@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# xh — универсальный CLI обвязки x-harness для любого агента (Claude, Codex, DSH, GLM, generic).
+# Поддерживает оба профиля: full (Laravel-профиль) и planning (только управление планами).
+set -euo pipefail
+
+ROOT="$(cd -- "$(dirname -- "$0")/.." && pwd)"
+if PROJECT="$(git rev-parse --show-toplevel 2>/dev/null)"; then :; else PROJECT="$PWD"; fi
+export CLAUDE_PROJECT_DIR="$PROJECT"
+H="$PROJECT/.claude"
+PROFILE="full"
+[ -f "$PROJECT/.claude/planning.conf" ] && PROFILE="planning"
+
+usage() {
+  cat <<'EOF'
+Usage: bin/xh <command> [args]
+
+  doctor                 что подключено в текущем репозитории (профиль, git, хуки, навыки, drift)
+  gate [--fast|--merge]  Quality Gate: команды GATE_FAST/GATE_MERGE проекта (planning) или Laravel-набор (full)
+  gate-fast              то же, что gate --fast
+  drift                  plans-drift (расхождения реестров с git)
+  init                   планировочный профиль: создать недостающие реестры planning/
+  merge-ready <ветка>    сухой прогон merge-gate перед мержем в main (без мержа и без захвата маркеров)
+  registry <args>        registry.sh (только он правит индексы planning/)
+  hook <name>            запустить хук обвязки вручную; JSON читается со stdin
+  skills                 список навыков и их расположение
+  verify [args]          verify.sh для текущего проекта (профиль определяется автоматически)
+  help                   эта справка
+EOF
+}
+
+need() { [ -x "$H/$1" ] || { echo "xh: нет $H/$1 — обвязка ($PROFILE) не установлена в $PROJECT" >&2; exit 2; }; }
+
+cmd=help
+if [ $# -gt 0 ]; then
+  cmd="$1"
+  shift
+fi
+case "$cmd" in
+  help|-h|--help) usage ;;
+  doctor)
+    echo "project: $PROJECT"
+    echo "profile: $PROFILE"
+    echo "branch:  $(git -C "$PROJECT" symbolic-ref --short -q HEAD 2>/dev/null || echo '<no git>')"
+    echo "hooks:   $(git -C "$PROJECT" config --get core.hooksPath 2>/dev/null || echo '<unset>')"
+    echo "harness: $( [ -d "$H" ] && echo present || echo MISSING )"
+    if [ "$PROFILE" = planning ]; then
+      echo "planning: $(ls "$PROJECT/planning" 2>/dev/null | tr '\n' ' ')"
+      echo "conf:    $( [ -f "$H/planning.conf" ] && grep -E '^(MAIN_BRANCH|CODE_ROOTS)=' "$H/planning.conf" | tr '\n' ' ' || echo MISSING )"
+      echo "scripts: $(ls "$H/scripts" 2>/dev/null | tr '\n' ' ')"
+      echo "skills:  $(ls "$PROJECT/.agents/skills" 2>/dev/null | tr '\n' ' ')"
+    else
+      echo "codex:   $( [ -d "$PROJECT/.codex" ] && echo present || echo absent )"
+      echo "skills:  $(ls "$PROJECT/.ai/skills" 2>/dev/null | tr '\n' ' ')"
+      echo "agents:  $(ls "$H/agents" 2>/dev/null | sed 's/\.md$//' | tr '\n' ' ')"
+    fi
+    echo "--- drift ---"
+    if [ -x "$H/hooks/plans-drift.sh" ]; then "$H/hooks/plans-drift.sh" || true; else echo "plans-drift недоступен"; fi
+    echo "--- parity ---"
+    bash "$ROOT/verify.sh" --project "$PROJECT" --quiet 2>&1 | tail -20 || true
+    ;;
+  gate) need scripts/quality-gate.sh; exec "$H/scripts/quality-gate.sh" "$@" ;;
+  gate-fast) need scripts/quality-gate.sh; exec "$H/scripts/quality-gate.sh" --fast ;;
+  drift) need hooks/plans-drift.sh; exec "$H/hooks/plans-drift.sh" ;;
+  init) need scripts/planning-init.sh; exec "$H/scripts/planning-init.sh" ;;
+  merge-ready) need scripts/merge-ready.sh; exec "$H/scripts/merge-ready.sh" "$@" ;;
+  registry) need scripts/registry.sh; exec "$H/scripts/registry.sh" "$@" ;;
+  hook)
+    name="$1"; shift
+    need "hooks/$name.sh"; exec "$H/hooks/$name.sh" "$@" ;;
+  skills)
+    echo "профиль: $PROFILE"
+    if [ "$PROFILE" = planning ]; then
+      echo "навыки (.claude/skills):"; ls "$PROJECT/.claude/skills" 2>/dev/null || true
+      echo "навыки (.agents/skills):"; ls "$PROJECT/.agents/skills" 2>/dev/null || true
+    else
+      echo "канонические (.ai/skills):"; ls "$PROJECT/.ai/skills" 2>/dev/null || true
+      echo "локальные (.claude/skills):"; ls "$PROJECT/.claude/skills" 2>/dev/null || true
+    fi
+    echo "лицензии — в каталогах навыков" ;;
+  verify) exec "$ROOT/verify.sh" --project "$PROJECT" "$@" ;;
+  *) echo "xh: неизвестная команда '$cmd'" >&2; usage; exit 2 ;;
+esac

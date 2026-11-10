@@ -1,0 +1,5 @@
+# x-harness package
+.DS_Store
+__pycache__/
+*.pyc
+.x-harness-backup.*

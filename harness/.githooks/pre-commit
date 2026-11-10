@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Авторитетная проверка на РЕАЛЬНОМ индексе (PLAN-145, E19): E2/E7/E8/E9, fail-closed по paths.conf
+# (commit_checks.py staged) и registry.sh check по STAGED-дереву planning/. Только дешёвые проверки.
+cd "$(git rev-parse --show-toplevel)" || exit 0
+branch="$(git symbolic-ref --short -q HEAD || echo HEAD)"
+fail=0
+
+python3 .claude/hooks/commit_checks.py staged "$branch" staged --hook
+[ $? -eq 2 ] && fail=1
+
+# registry.sh читает файлы с диска, а в коммит уйдёт индекс — выгружаем staged-версию planning/ во временный каталог.
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$tmp/planning"
+git ls-files -z -- planning | xargs -0 git checkout-index --prefix="$tmp/" -- 2>/dev/null
+export_rc=$?
+expected="$(git ls-files -- planning | wc -l)"
+got="$(find "$tmp/planning" -type f | wc -l)"
+if [ $export_rc -ne 0 ] || [ "$expected" -ne "$got" ]; then
+  # пустой/неполный экспорт нельзя выдавать за «реестр чист»
+  echo "pre-commit: внутренняя ошибка хука — выгрузка staged-дерева planning/ ($got из $expected файлов); проверка реестров НЕ выполнена" >&2
+  rc=0; out=""
+else
+out="$(.claude/scripts/registry.sh check --registry all --root "$tmp" 2>&1)"
+rc=$?
+fi
+if [ $rc -ne 0 ] && { [ $rc -ne 1 ] || printf '%s' "$out" | grep -q 'Traceback'; }; then
+  # fail-open: баг самого registry.sh не должен парализовать владельца.
+  echo "pre-commit: внутренняя ошибка registry.sh (код $rc), проверка реестров пропущена" >&2
+elif [ $rc -eq 1 ]; then
+  echo "$out" >&2
+  fail=1
+fi
+
+[ $fail -eq 1 ] && echo "pre-commit: коммит заблокирован (E19). Обход — только владелец: git commit --no-verify." >&2
+exit $fail

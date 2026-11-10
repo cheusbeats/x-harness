@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# commit-msg — токен PLAN-N / HF-M в сообщении коммита (SPEC п.5,7).
+# Логика — .claude/hooks/planning-checks.py msg. Внутренний сбой хука не блокирует
+# коммит: владелец не должен быть парализован багом хука.
+# exit 1 = коммит заблокирован.
+cd "$(git rev-parse --show-toplevel)" || exit 0
+command -v python3 >/dev/null 2>&1 || {
+  echo "commit-msg: python3 не найден — проверка токена НЕ выполнена (fail-open)" >&2
+  exit 0
+}
+[ -f .claude/hooks/planning-checks.py ] || exit 0
+branch="$(git symbolic-ref --short -q HEAD || echo HEAD)"
+python3 .claude/hooks/planning-checks.py msg "$1" "$branch"
+rc=$?
+[ "$rc" -eq 2 ] && exit 1
+exit 0

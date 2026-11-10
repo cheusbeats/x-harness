@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# PLAN-145, E19: структура диапазона + реестры на пушимом дереве + (только если тронуты хуки) тесты хуков.
+# Владельца с main не блокирует, пока структура чистая и тесты зелёные. Теги и удаление ветки (sha из нулей)
+# пропускаются целиком.
+cd "$(git rev-parse --show-toplevel)" || exit 0
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "pre-push: python3 не найден — проверки НЕ выполнены (fail-open)" >&2
+  exit 0
+fi
+fail=0
+test_shas=()  # пушимые коммиты, для которых гоним тесты хуков (на их дереве, не на рабочем)
+tmp="$(mktemp -d)"
+worktrees=()  # временные чекауты пушимых коммитов; убираем вместе с записью в .git/worktrees
+cleanup() {
+  for w in "${worktrees[@]}"; do git worktree remove --force "$w" >/dev/null 2>&1; done
+  git worktree prune >/dev/null 2>&1
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+# Наборы и верификаторы идут в герметичном окружении: ни CLAUDE_PROJECT_DIR (хуки фикстур ушли бы в настоящий репозиторий),
+# ни какой-либо GIT_* (GIT_DIR, GIT_INDEX_FILE, GIT_CONFIG_COUNT/KEY_n/VALUE_n, GIT_CONFIG_PARAMETERS, GIT_COMMON_DIR …).
+scrub_env() {
+  local v
+  for v in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p') CLAUDE_PROJECT_DIR; do unset "$v"; done
+}
+
+while read -r lref lsha rref rsha; do
+  case "$lref" in refs/tags/*) continue ;; esac
+  [[ "$lsha" =~ ^0+$ ]] && continue
+  if [[ "$rsha" =~ ^0+$ ]]; then
+    base="$(git merge-base origin/main "$lsha" 2>/dev/null)"
+  else
+    base="$rsha"
+  fi
+  if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then
+    python3 .claude/hooks/commit_checks.py push-range "$base" "$lsha"
+    [ $? -eq 2 ] && { echo "pre-push: структура диапазона ${lref} нарушена" >&2; fail=1; }
+    if git diff --name-only "$base" "$lsha" | grep -Eq '^(\.claude/hooks/|\.claude/scripts/|\.githooks/|\.codex/)'; then
+      test_shas+=("$lsha")
+    fi
+  else
+    echo "pre-push: диапазон ${lref} не вычислен (нет origin/main, общего предка или локального объекта remote sha) — структура НЕ проверена" >&2
+    test_shas+=("$lsha")  # диапазон неизвестен — тесты хуков гоним на всякий случай
+  fi
+  # реестры на пушимом дереве
+  rm -rf "$tmp/tree"; mkdir -p "$tmp/tree"
+  if git archive "$lsha" planning -o "$tmp/a.tar" 2>/dev/null && tar -x -f "$tmp/a.tar" -C "$tmp/tree" 2>/dev/null && [ -d "$tmp/tree/planning" ]; then
+    out="$(.claude/scripts/registry.sh check --registry all --root "$tmp/tree" 2>&1)"
+    rc=$?
+    if [ $rc -eq 1 ] && ! printf '%s' "$out" | grep -q 'Traceback'; then
+      echo "$out" >&2; fail=1
+    elif [ $rc -ne 0 ]; then
+      echo "pre-push: внутренняя ошибка registry.sh (код $rc), проверка реестров НЕ выполнена" >&2
+    fi
+  else
+    echo "pre-push: внутренняя ошибка хука — выгрузка planning/ из ${lsha:0:8} не удалась; проверка реестров НЕ выполнена" >&2
+  fi
+  # побайтовая сверка миграций (тела closed/* и hotfixes/* против зафиксированных SHA), если диапазон трогает их или верификаторы
+  # (или диапазон неизвестен). Гоним на чекауте пушимого коммита: верификаторы читают файлы своего корня и историю git.
+  if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null \
+     || git diff --name-only "$base" "$lsha" | grep -Eq '^(planning/plans/closed/|planning/hotfixes/|\.claude/scripts/verify-)'; then
+    vt="$tmp/verify-${lsha:0:12}"
+    if git worktree add --detach -q "$vt" "$lsha" >/dev/null 2>&1; then
+      worktrees+=("$vt")
+      for v in verify-plans-migration.sh verify-journal-migration.sh; do
+        [ -x "$vt/.claude/scripts/$v" ] || continue  # коммит до миграции: верификатора ещё нет
+        vout="$(scrub_env; "$vt/.claude/scripts/$v" --root "$vt" 2>&1)" || { echo "pre-push: $v — расхождение с исходным SHA:" >&2; echo "$vout" | tail -5 >&2; fail=1; }
+      done
+    else
+      echo "pre-push: внутренняя ошибка хука — чекаут ${lsha:0:8} для верификаторов не удался; миграции НЕ сверены" >&2
+    fi
+  fi
+done
+
+# Тесты хуков — только если диапазон трогает хуки. Гоним на ЧЕКАУТЕ пушимого коммита (git worktree --detach), а не на
+# рабочем дереве — там может быть что угодно. Именно worktree, а не git archive: тесты зовут git ls-files / rev-parse в
+# своём корне (классификация корневых элементов, перебор денежных путей), без git-контекста они падают. Наборы параллельно.
+for sha in "${test_shas[@]}"; do
+  ex="$tmp/export-${sha:0:12}"
+  if ! git worktree add --detach -q "$ex" "$sha" >/dev/null 2>&1; then
+    echo "pre-push: внутренняя ошибка хука — чекаут дерева ${sha:0:8} не удался; тесты хуков НЕ выполнены" >&2
+    continue
+  fi
+  worktrees+=("$ex")
+  i=0
+  for cmd in \
+    "python3 .claude/hooks/test_planning_gates.py" \
+    "python3 .claude/hooks/test_main_push_guard.py" \
+    "python3 .claude/hooks/test_db_wipe_guard.py" \
+    "python3 .claude/hooks/test_owner_ok.py" \
+    "python3 .claude/hooks/test_merge_gate.py" \
+    "python3 .claude/hooks/test_e18.py" \
+    "python3 .claude/scripts/test_registry.py" \
+    "python3 .claude/hooks/test_githooks.py" \
+    "python3 .claude/hooks/test_quality_gate.py" \
+    "cd .codex/hooks && python3 -m unittest test_claude_compat"; do
+    i=$((i + 1))
+    ( cd "$ex" && scrub_env && eval "$cmd" ) >"$tmp/t$i.log" 2>&1 &
+    pids[$i]=$!
+    names[$i]="$cmd"
+  done
+  for j in $(seq 1 $i); do
+    if ! wait "${pids[$j]}"; then
+      echo "pre-push: тесты упали на ${sha:0:8}: ${names[$j]}" >&2
+      tail -30 "$tmp/t$j.log" >&2
+      fail=1
+    fi
+  done
+done
+
+[ $fail -eq 1 ] && echo "pre-push: push заблокирован (E19). Обход — только владелец: git push --no-verify." >&2
+exit $fail

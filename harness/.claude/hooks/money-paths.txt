@@ -1,0 +1,28 @@
+# Денежные пути (E12): дифф ветки трогает любой из них -> перед мержем нужны ОБЕ отметки ревью (opus и codex).
+# Строка = маска fnmatch по полному пути (`*` захватывает и `/`); заканчивается на `/` — префикс каталога.
+# Шаблон с общими словами: дополни путями своего проекта. Полноту держит тест-перебор
+# test_every_money_keyword_file_is_money (test_merge_gate.py): файл с денежным словом в имени без строки здесь
+# роняет тест; исключения перечислены в самом тесте.
+
+app/*Payment*
+app/*Billing*
+app/*Refund*
+app/*Invoice*
+app/*Subscription*
+app/*Balance*
+app/*Price*
+app/*Tariff*
+database/factories/*Payment*
+database/factories/*Billing*
+database/factories/*Refund*
+database/factories/*Invoice*
+database/factories/*Subscription*
+database/factories/*Balance*
+database/migrations/*payment*
+database/migrations/*billing*
+database/migrations/*refund*
+database/migrations/*invoice*
+database/migrations/*subscription*
+database/migrations/*balance*
+config/*billing*
+config/*payment*

@@ -1,0 +1,20 @@
+{
+  "description": "Проверки Claude проекта для Codex; логика остаётся в .claude/hooks.",
+  "hooks": {
+    "SessionStart": [{"hooks": [{"type": "command", "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/claude-compat.py\" plans-drift", "timeout": 20, "statusMessage": "Сверяю планы с git"},
+      {"type": "command", "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/claude-compat.py\" rules", "timeout": 10, "additionalContextLimit": 6000, "statusMessage": "Подключаю правила .claude/rules"}]}],
+    "PreToolUse": [
+      {"matcher": "apply_patch|Edit|Write|NotebookEdit", "hooks": [{"type": "command", "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/claude-compat.py\" branch-guard", "timeout": 10},
+        {"type": "command", "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/claude-compat.py\" registry-guard", "timeout": 10}]},
+      {"matcher": "Bash|exec_command|shell_command|shell|functions.exec_command", "hooks": [
+        {"type": "command", "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/claude-compat.py\" commit-gate", "timeout": 180, "statusMessage": "Quality Gate перед коммитом"},
+        {"type": "command", "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/claude-compat.py\" merge-gate", "timeout": 10},
+        {"type": "command", "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/claude-compat.py\" main-push-guard", "timeout": 10},
+        {"type": "command", "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/claude-compat.py\" db-wipe-guard", "timeout": 10},
+        {"type": "command", "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/claude-compat.py\" owner-ok-guard", "timeout": 10},
+        {"type": "command", "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/claude-compat.py\" big-read-guard", "timeout": 10}
+      ]},
+      {"matcher": "Read", "hooks": [{"type": "command", "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/claude-compat.py\" big-read-guard", "timeout": 10}]}
+    ]
+  }
+}

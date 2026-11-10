@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# E3 (PLAN-145): токен PLAN-N / HF-N в сообщении каждого коммита. Логика — commit_checks.py msg.
+# Сбой самого хука (нет python3 и т.п.) не блокирует коммит: владелец не должен быть парализован багом хука.
+cd "$(git rev-parse --show-toplevel)" || exit 0
+branch="$(git symbolic-ref --short -q HEAD || echo HEAD)"
+python3 .claude/hooks/commit_checks.py msg "$branch" "$1" "$PPID"
+[ $? -eq 2 ] && exit 1
+exit 0
