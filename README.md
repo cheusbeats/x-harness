@@ -119,7 +119,7 @@ git clone --depth 1 https://github.com/cheusbeats/x-harness.git /tmp/x-harness &
 
 ### Примеры
 
-Во всех примерах пакет клонируется один раз в `/tmp/x-harness`, а установщик запускается **из каталога целевого проекта**, а не из самого x-harness.
+Примеры — по одному на агента, профиль `planning` (для Laravel убери `--profile planning`). Во всех примерах пакет клонируется один раз в `/tmp/x-harness`, а установщик запускается **из каталога целевого проекта**, а не из самого x-harness.
 
 ```bash
 git clone --depth 1 https://github.com/cheusbeats/x-harness.git /tmp/x-harness
@@ -131,18 +131,27 @@ git clone --depth 1 https://github.com/cheusbeats/x-harness.git /tmp/x-harness
 git -C /tmp/x-harness pull --ff-only
 ```
 
-#### 1. Реестры планов в проекте на любом стеке (Claude Code + Codex)
+#### Пример 1. Claude Code
+
+Плагин (в чате Claude Code) — ради скиллов; хуки проекта Claude Code берёт из `.claude/settings.json`:
+
+```
+/plugin marketplace add cheusbeats/x-harness
+/plugin install x-harness@x-harness
+```
+
+Обвязка в проект:
 
 ```bash
 cd ~/work/projects/my-app
-bash /tmp/x-harness/install.sh --project . --profile planning --clients claude,codex
+bash /tmp/x-harness/install.sh --project . --profile planning --clients claude
 ```
 
 Ожидаемый вывод (сокращён):
 
 ```
 x-harness: profile=planning mode=snapshot project=/Users/you/work/projects/my-app
-клиенты: claude=1 codex=1 dsh=0 kimi=0 zcode=0 opencode=0 generic=0; skills=auto
+клиенты: claude=1 codex=0 dsh=0 kimi=0 zcode=0 opencode=0 generic=0; skills=auto
 1/5 payload planning -> /Users/you/work/projects/my-app
 2/5 git-хуки
 ok: core.hooksPath=.githooks
@@ -151,43 +160,120 @@ init: реестры planning/
   создан: planning/ACTIVE_PLANS.md
 ```
 
-Первый план:
+Перезапусти сессию Claude Code в папке проекта. Первый план:
 
 ```bash
 .claude/scripts/registry.sh add PLAN auto "Название плана"
 ```
 
-#### 2. Laravel-проект: Claude Code, Kimi Code и OpenCode
+#### Пример 2. Codex
 
-Сначала посмотри план без изменений, потом установи:
+Плагин (в терминале):
 
 ```bash
-cd ~/work/projects/shop
-bash /tmp/x-harness/install.sh --project . --clients claude,kimi,opencode --dry-run
+codex plugin marketplace add cheusbeats/x-harness
 ```
 
 ```bash
-bash /tmp/x-harness/install.sh --project . --clients claude,kimi,opencode
+codex plugin add x-harness@x-harness
 ```
 
-Проект получит `CLAUDE.md`/`AGENTS.md`, `.claude/` (хуки, скрипты, роли), `.ai/` (правила и навыки), `.githooks/`, `planning/README.md`, а для Kimi — роли `.agents/agents/*.md`. Хуки Kimi и OpenCode приходят из плагина (шаг 1), у Claude Code — из `.claude/settings.json`.
+Обвязка в проект:
 
-#### 3. Проект для DeepSeek Harness
+```bash
+cd ~/work/projects/my-app
+bash /tmp/x-harness/install.sh --project . --profile planning --clients codex
+```
 
-Один раз на машину — бандл в профиль DSH (шаг 1), затем обвязка в каждый проект:
+Проект получит `AGENTS.md` и `.codex/hooks.json`; в профиле `full` ещё роли `.codex/agents/*.toml`. Хуки плагина в таком проекте молчат, чтобы не срабатывать дважды.
+
+Перезапусти Codex в папке проекта и подтверди доверие к новым хукам. Не спросил — открой `/hooks` и включи их там.
+
+#### Пример 3. Kimi Code
+
+Плагин: Kimi Code → Plugins → установка из GitHub: `cheusbeats/x-harness`.
+
+Обвязка в проект:
+
+```bash
+cd ~/work/projects/my-app
+bash /tmp/x-harness/install.sh --project . --profile planning --clients kimi
+```
+
+Проект получит `AGENTS.md` и скиллы `.agents/skills`; в профиле `full` ещё роли `.agents/agents/*.md` (ссылки на `.claude/agents/`). Хуки Kimi приходят только из плагина — без шага с плагином запись в индексы не блокируется.
+
+Перезапусти Kimi Code и открой проект.
+
+#### Пример 4. ZCode
+
+Плагин (в чате ZCode):
+
+```
+/plugin marketplace add cheusbeats/x-harness
+/plugin install x-harness@x-harness
+```
+
+Обвязка в проект; `--skills global` дополнительно кладёт скиллы в `~/.zcode/skills`:
+
+```bash
+cd ~/work/projects/my-app
+bash /tmp/x-harness/install.sh --project . --profile planning --clients zcode
+```
+
+Проект получит `AGENTS.md` и скиллы `.agents/skills`; в профиле `full` ещё `CLAUDE.md` и `.agents/mcp.json` → `.mcp.json`. Хуки приходят из плагина (`hooks/hooks.json`).
+
+Перезапусти ZCode и подтверди доверие к хукам плагина.
+
+#### Пример 5. OpenCode
+
+Плагин — в `~/.config/opencode/opencode.json`:
+
+```json
+{ "plugin": ["x-harness@git+https://github.com/cheusbeats/x-harness.git"] }
+```
+
+Обвязка в проект:
+
+```bash
+cd ~/work/projects/my-app
+bash /tmp/x-harness/install.sh --project . --profile planning --clients opencode
+```
+
+Перезапусти OpenCode в папке проекта. Плагин сам регистрирует роли `.claude/agents/*.md` (профиль `full`) как субагентов и блокирует запрещённые правки перед вызовом инструмента.
+
+#### Пример 6. DeepSeek Harness (DSH)
+
+Один раз на машину — бандл в профиль DSH (мост той же версии, что Host):
 
 ```bash
 dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@$(dsh --version) @deepseek-ai/dsh-hook-protocol@$(dsh --version) github:cheusbeats/x-harness
 ```
+
+Обвязка в каждый проект:
 
 ```bash
 cd ~/work/projects/my-app
 bash /tmp/x-harness/install.sh --project . --profile planning --clients dsh
 ```
 
-Перезапусти профиль `web` и открой сессию с рабочей папкой `my-app`. Если x-harness уже стоял без бандла (DSH писал `declares no dsh.bundle`), обнови его: `dsh plugin --profile web update x-harness`.
+Перезапусти профиль `web` и открой сессию с рабочей папкой `my-app`. В «Настройки → Плагины → Список плагинов» должен быть `include:x-harness-hooks` со статусом «смонтирован». Если x-harness уже стоял без бандла (DSH писал `declares no dsh.bundle`): `dsh plugin --profile web update x-harness`.
 
-#### 4. Повторная установка поверх старой версии
+#### Пример 7. Laravel-проект на нескольких агентах
+
+Профиль `full` (без `--profile planning`), клиенты через запятую. Сначала план без изменений, потом установка:
+
+```bash
+cd ~/work/projects/shop
+bash /tmp/x-harness/install.sh --project . --clients claude,codex,kimi,opencode --dry-run
+```
+
+```bash
+bash /tmp/x-harness/install.sh --project . --clients claude,codex,kimi,opencode
+```
+
+Проект получит `CLAUDE.md`/`AGENTS.md`, `.claude/` (хуки, скрипты, роли), `.ai/` (правила и навыки), `.githooks/`, `planning/README.md` и файлы каждого клиента из примеров выше. Плагин (шаг 1) ставится в каждый клиент отдельно.
+
+#### Пример 8. Повторная установка поверх старой версии
 
 ```bash
 git -C /tmp/x-harness pull --ff-only
