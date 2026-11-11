@@ -389,9 +389,8 @@ grep -q 'dsh-hooks-plugin' "$FAKE_DSH_LOG" || die "install не вызывал d
 expect_ok "install --dsh-hooks bridge" "$LOGS/07-install-dsh-bridge.log" \
   bash "$ROOT/install.sh" --project "$DSH_BRIDGE_REPO" --profile planning --clients none --skills none \
     --dsh-hooks bridge --dsh-version 0.0.0-test --no-verify
-check_dsh_adapter "$DSH_BRIDGE_REPO" "$DSH_BRIDGE_REPO/.dsh/hooks-bridge.json" ".dsh/hooks-bridge.json (bridge)"
-[ -f "$DSH_BRIDGE_REPO/.dsh/hooks-bridge.yml" ] || die "нет .dsh/hooks-bridge.yml"
-grep -q 'hooks-bridge.json' "$DSH_BRIDGE_REPO/.dsh/hooks-bridge.yml" || die "hooks-bridge.yml без configPath"
+grep -q "github:cheusbeats/x-harness" "$FAKE_DSH_LOG" || die "bridge: install не добавил бандл x-harness в профиль DSH"
+[ ! -e "$DSH_BRIDGE_REPO/.dsh/hooks-bridge.json" ] || die "bridge: конфиг моста не должен лежать в проекте (он общий на процесс DSH)"
 grep -q '0.0.0-test' "$FAKE_DSH_LOG" || die "install не вызывал dsh plugin с --dsh-version"
 step_ok
 

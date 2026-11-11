@@ -4,5 +4,10 @@
   "description": "Обвязка разработки для агентов: реестры планов RM/PLAN/HF, git-процесс, гейты и хуки, роли субагентов. Хуки срабатывают только в проектах с установленной обвязкой.",
   "type": "module",
   "main": ".opencode/plugins/x-harness.js",
-  "license": "MIT"
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./dsh/cordis.patch.yml"
+    }
+  }
 }
